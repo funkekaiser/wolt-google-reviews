@@ -69,6 +69,8 @@ function panel(slug: string, v: Venue): HTMLElement {
   frame.className = "wgr-map";
   frame.src = embedUrl(v);
   frame.loading = "lazy";
+  // Sends the wolt.com page URL as the referrer, which is what lets the API key
+  // be restricted to https://wolt.com/* in Google Cloud. Don't weaken this.
   frame.referrerPolicy = "no-referrer-when-downgrade";
   frame.title = `${v.name} on Google Maps`;
   frame.setAttribute("allowfullscreen", "");

@@ -25,7 +25,12 @@ GOOGLE_EMBED_KEY=AIza... npm run build --workspace extension
 
 Or put the key in `extension/.env` (git-ignored) as `GOOGLE_EMBED_KEY=AIza...` and just run `npm run build`.
 
-Get the key in [Google Cloud Console](https://console.cloud.google.com/): enable **Maps Embed API**, create an API key and restrict it, under *API restrictions*, to **Maps Embed API** only. That key can then only be used for a free API, so shipping it inside the extension is fine — which is how the Embed API is meant to be used. Consider adding a website restriction as well.
+Get the key in [Google Cloud Console](https://console.cloud.google.com/): enable **Maps Embed API**, then create an API key and restrict it both ways:
+
+- *API restrictions* → **Maps Embed API** only, so the key can't be used for anything Google charges for.
+- *Application restrictions* → **Websites** → `https://wolt.com/*`. The map is embedded in a Wolt page, so Google sees wolt.com as the referring site and the key is useless anywhere else.
+
+With those set, shipping the key inside the extension is fine, which is how the Embed API is meant to be used.
 
 In Chrome, open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick `extension/dist`.
 
