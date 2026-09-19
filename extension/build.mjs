@@ -3,9 +3,21 @@
 // shipping it in the extension is expected):
 //   GOOGLE_EMBED_KEY=AIza... npm run build
 import * as esbuild from "esbuild";
-import { cp, mkdir, rm } from "node:fs/promises";
+import { cp, mkdir, readFile, rm } from "node:fs/promises";
 
-const embedKey = process.env.GOOGLE_EMBED_KEY ?? "";
+// Key from the environment, or from extension/.env (git-ignored) so local
+// builds don't have to repeat it.
+async function readKey() {
+  if (process.env.GOOGLE_EMBED_KEY) return process.env.GOOGLE_EMBED_KEY;
+  try {
+    const env = await readFile(".env", "utf8");
+    return /^GOOGLE_EMBED_KEY=(.+)$/m.exec(env)?.[1].trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+const embedKey = await readKey();
 const watch = process.argv.includes("--watch");
 
 if (process.argv.includes("--release") && !/^AIza[\w-]{35}$/.test(embedKey)) {

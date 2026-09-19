@@ -4,3 +4,6 @@ dist/
 .dev.vars
 *.zip
 .DS_Store
+
+# local build key
+.env
