@@ -21,8 +21,9 @@
     // the worst case (every request on the priciest SKU) is roughly $40/month.
     "GOOGLE_DAILY_LIMIT": "100",
     "GOOGLE_MONTHLY_LIMIT": "2000",
-    // Comma-separated Origins allowed to call the API, e.g.
-    // "chrome-extension://abcdefghijklmnopabcdefghijklmnop". Empty = allow all.
+    // Requests carrying an Origin header are refused unless it's listed here
+    // (comma-separated). The extension sends no Origin, so this only blocks
+    // other websites; see src/index.ts.
     "ALLOWED_ORIGINS": ""
   }
   // Secret (not in this file): GOOGLE_PLACES_API_KEY

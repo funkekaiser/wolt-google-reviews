@@ -17,18 +17,43 @@ const lang = /^[a-z]{2}(-[a-z]{2,4})?$/i.test(pathLang) ? pathLang : undefined;
 // Results keyed by `${slug}|${withReviews}`; the promise dedupes in-flight lookups.
 const results = new Map<string, Promise<PlaceMatch | null>>();
 
+// When the extension is reloaded or updated, copies of this script already
+// running in open tabs are orphaned: chrome.runtime becomes undefined (or
+// throws). Detect that and stop, instead of throwing on every DOM change.
+let orphaned = false;
+const stopHandlers: (() => void)[] = [];
+
+function extensionAlive(): boolean {
+  if (orphaned) return false;
+  try {
+    if (chrome.runtime?.id) return true;
+  } catch {
+    // "Extension context invalidated"
+  }
+  orphaned = true;
+  stopHandlers.forEach((stop) => stop());
+  return false;
+}
+
 function lookup(slug: string, withReviews: boolean): Promise<PlaceMatch | null> {
+  if (!extensionAlive()) return Promise.resolve(null);
   const key = `${slug}|${withReviews}`;
   let p = results.get(key);
   if (!p) {
     const req: LookupRequest = { type: "lookup", slug, withReviews, lang };
-    p = chrome.runtime.sendMessage<LookupRequest, LookupResponse>(req).then((res) => {
-      if (res?.ok) return res.match;
-      // Keep the failure briefly so DOM churn doesn't hammer the API, then allow a retry.
-      setTimeout(() => results.delete(key), 30_000);
-      console.debug("[wolt-google-reviews]", slug, res?.error);
-      return null;
-    });
+    p = chrome.runtime
+      .sendMessage<LookupRequest, LookupResponse>(req)
+      .catch((err): LookupResponse => {
+        extensionAlive(); // stops everything if this was an invalidated context
+        return { ok: false, error: String(err) };
+      })
+      .then((res) => {
+        if (res?.ok) return res.match;
+        // Keep the failure briefly so DOM churn doesn't hammer the API, then allow a retry.
+        setTimeout(() => results.delete(key), 30_000);
+        console.debug("[wolt-google-reviews]", slug, res?.error);
+        return null;
+      });
     results.set(key, p);
   }
   return p;
@@ -88,6 +113,7 @@ const visible = new IntersectionObserver(
   },
   { rootMargin: "200px" },
 );
+stopHandlers.push(() => visible.disconnect());
 
 // The card's footer row reads "€0.00 · €€ · 😊 8.4"; the badge goes right after
 // Wolt's own score. Wolt has no test IDs there, so find the score by its shape.
@@ -213,7 +239,7 @@ async function scanVenuePage() {
 
 let scheduled = false;
 function scheduleScan() {
-  if (scheduled) return;
+  if (scheduled || !extensionAlive()) return;
   scheduled = true;
   requestAnimationFrame(() => {
     scheduled = false;
@@ -225,7 +251,9 @@ function scheduleScan() {
 loadSettings().then((s) => {
   settings = s;
   scheduleScan();
-  new MutationObserver(scheduleScan).observe(document.body, { childList: true, subtree: true });
+  const observer = new MutationObserver(scheduleScan);
+  observer.observe(document.body, { childList: true, subtree: true });
+  stopHandlers.push(() => observer.disconnect());
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {

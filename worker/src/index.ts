@@ -36,9 +36,13 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405);
 
-    const allowed = env.ALLOWED_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean);
+    // Browsers attach Origin to cross-site requests, so this stops other
+    // websites from spending our Google quota. The extension's background
+    // fetch sends no Origin (it has host permission), and nothing can stop a
+    // non-browser client; the rate limit and request cap handle those.
     const origin = request.headers.get("Origin");
-    if (allowed.length > 0 && (!origin || !allowed.includes(origin))) {
+    const allowed = env.ALLOWED_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean);
+    if (origin && !allowed.includes(origin)) {
       return json({ error: "forbidden" }, 403);
     }
 
