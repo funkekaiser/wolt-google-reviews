@@ -28,7 +28,7 @@ Copy these into the [Developer Dashboard](https://chrome.google.com/webstore/dev
 
 **Graphics:**
 - Icon: included in the zip (128×128)
-- Screenshots (1280×800): `store/screenshot-venue.png`
+- Screenshot (1280×800): `store/screenshot-venue.png` — Annapurna in Helsinki, map beside the restaurant name
 - Small promo tile (440×280): optional
 
 **Homepage URL:** https://github.com/funkekaiser/wolt-google-reviews

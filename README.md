@@ -2,7 +2,7 @@
 
 A Chrome extension that shows a restaurant's Google Maps rating while you order on [wolt.com](https://wolt.com).
 
-On a restaurant page it adds a small Google map below the header, with Google's own place card: star rating, number of reviews and a link to the reviews on Google Maps.
+On a restaurant page it adds a small Google map with Google's own place card: star rating, number of reviews and a link to the reviews on Google Maps. On a wide window the map sits beside the restaurant name; on a narrower one it goes below Wolt's info row.
 
 It works on the Wolt website in a desktop browser, not in the Wolt mobile apps.
 
@@ -39,7 +39,8 @@ In Chrome, open `chrome://extensions`, turn on **Developer mode**, click **Load 
 - `npm run package --workspace extension` → `extension/rating-lens-for-wolt.zip`. It refuses to build without a valid embed key.
 - Listing text and answers for the store's privacy questions: [`store/LISTING.md`](store/LISTING.md)
 - Privacy policy: [`PRIVACY.md`](PRIVACY.md)
-- Still to do: screenshots (1280×800) in `store/`, and a Firefox build.
+- Screenshot for the listing: `store/screenshot-venue.png`
+- Still to do: a Firefox build.
 
 ## Development
 
