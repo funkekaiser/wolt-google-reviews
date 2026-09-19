@@ -12,12 +12,20 @@ export async function fetchWoltVenue(slug: string): Promise<WoltVenue | null> {
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Wolt API ${res.status}`);
   const { venue } = await res.json<{
-    venue?: { slug?: string; name?: string; address?: string; post_code?: string; city?: string };
+    venue?: {
+      slug?: string;
+      name?: string;
+      brand_name?: string | null;
+      address?: string;
+      post_code?: string;
+      city?: string;
+    };
   }>();
   if (!venue?.name) return null;
   return {
     slug,
     name: venue.name,
+    brandName: venue.brand_name ?? undefined,
     address: venue.address ?? "",
     postCode: venue.post_code ?? "",
     city: venue.city ?? "",
