@@ -6,6 +6,11 @@ import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 const apiBase = (process.env.API_BASE ?? "http://localhost:8787").replace(/\/+$/, "");
 const watch = process.argv.includes("--watch");
 
+if (process.argv.includes("--release") && !apiBase.startsWith("https://")) {
+  console.error(`Refusing to build a release against ${apiBase}; set API_BASE to the deployed Worker.`);
+  process.exit(1);
+}
+
 await rm("dist", { recursive: true, force: true });
 await mkdir("dist", { recursive: true });
 await cp("static", "dist", { recursive: true });

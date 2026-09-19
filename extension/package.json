@@ -5,7 +5,7 @@
   "scripts": {
     "build": "node build.mjs",
     "watch": "node build.mjs --watch",
-    "package": "node build.mjs && cd dist && zip -qr ../wolt-google-reviews.zip .",
+    "package": "API_BASE=https://wolt-google-reviews.funkekaiser.workers.dev node build.mjs --release && cd dist && rm -f ../rating-lens-for-wolt.zip && zip -qr ../rating-lens-for-wolt.zip .",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

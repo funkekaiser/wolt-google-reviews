@@ -1,8 +1,8 @@
-# Privacy Policy: Google Reviews for Wolt
+# Privacy Policy: Rating Lens for Wolt
 
 _Last updated: 19 September 2026_
 
-Google Reviews for Wolt is a browser extension that shows Google Maps ratings and reviews next to restaurants on wolt.com. It is built to collect as little as possible.
+Rating Lens for Wolt is a browser extension that shows Google Maps ratings and reviews next to restaurants on wolt.com. It is built to collect as little as possible.
 
 ## What the extension sends
 

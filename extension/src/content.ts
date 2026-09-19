@@ -96,10 +96,11 @@ function badge(m: PlaceMatch): HTMLElement {
       class: "wgr-badge",
       title: `${m.name} on Google Maps: ${m.rating?.toFixed(1)} from ${m.userRatingCount} reviews`,
     },
-    el("span", { class: "wgr-g" }, "G"),
     el("span", { class: "wgr-star" }, "★"),
     m.rating!.toFixed(1),
     el("span", { class: "wgr-count" }, `(${formatCount(m.userRatingCount)})`),
+    // Google requires Places data shown without a Google map to carry "Google Maps" attribution.
+    el("span", { class: "wgr-source" }, "Google Maps"),
   );
 }
 
