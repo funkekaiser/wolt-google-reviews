@@ -3,15 +3,16 @@
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  margin-top: 4px;
-  padding: 1px 6px;
+  margin-left: 6px;
+  padding: 0 6px;
   border-radius: 999px;
   background: rgba(127, 127, 127, 0.14);
   font-size: 12px;
   font-weight: 600;
   line-height: 18px;
   white-space: nowrap;
-  width: fit-content;
+  flex-shrink: 0;
+  align-self: center;
 }
 .wgr-g {
   font-weight: 700;
@@ -27,13 +28,19 @@
 }
 
 .wgr-panel {
-  margin: 12px 0;
+  margin: 0 32px 16px;
+  text-align: start;
   padding: 12px 14px;
   border-radius: 12px;
   background: rgba(127, 127, 127, 0.1);
   font-size: 14px;
   line-height: 1.4;
   max-width: 720px;
+}
+@media (max-width: 640px) {
+  .wgr-panel {
+    margin: 0 16px 16px;
+  }
 }
 .wgr-summary {
   display: flex;
@@ -65,6 +72,10 @@
   padding: 0;
   display: grid;
   gap: 12px;
+}
+/* `display: grid` above would otherwise override the hidden attribute. */
+.wgr-reviews[hidden] {
+  display: none;
 }
 .wgr-review-head {
   display: flex;

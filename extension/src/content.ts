@@ -5,6 +5,8 @@ import { DEFAULT_SETTINGS, loadSettings, type LookupRequest, type LookupResponse
 
 const CARD_TITLE = '[data-test-id="venue-title"]';
 const VENUE_TITLE = '[data-test-id="venue-hero.venue-title"]';
+// Wraps the hero banner (fixed height, overflow hidden) and the info row below it.
+const VENUE_HEADER = '[data-test-id="venue-content-header.root"]';
 const SLUG_IN_PATH = /\/(?:restaurant|venue)\/([a-z0-9][a-z0-9-]*)/i;
 
 let settings = DEFAULT_SETTINGS;
@@ -87,12 +89,33 @@ const visible = new IntersectionObserver(
   { rootMargin: "200px" },
 );
 
+// The card's footer row reads "€0.00 · €€ · 😊 8.4"; the badge goes right after
+// Wolt's own score. Wolt has no test IDs there, so find the score by its shape.
+// Returns the element to insert after and the card to check for an existing badge.
+function badgeSlot(title: HTMLElement): { after: Element; card: Element } {
+  let card: Element | null = title.parentElement;
+  for (let depth = 0; card && depth < 6; depth++, card = card.parentElement) {
+    const score = [...card.querySelectorAll("span")].find(
+      (s) => s.childElementCount === 0 && /^\d{1,2}\.\d$/.test(s.textContent?.trim() ?? "") && !s.closest(".wgr-badge"),
+    );
+    const item = score?.parentElement?.closest("span");
+    if (item && card.contains(item)) return { after: item, card };
+  }
+  // No Wolt score (e.g. a new venue): fall back to next to the title.
+  return { after: title, card: title.parentElement ?? title };
+}
+
 async function attachBadge(title: HTMLElement) {
   const slug = title.dataset.wgrSlug!;
   const m = await lookup(slug, false);
   if (!m || m.rating == null || !title.isConnected || !settings.showOnLists) return;
-  if (title.parentElement?.querySelector(".wgr-badge")) return;
-  title.after(badge(m));
+  const slot = badgeSlot(title);
+  if (slot.card.querySelector(".wgr-badge")) return;
+  slot.after.after(badge(m));
+}
+
+function hasBadge(title: HTMLElement): boolean {
+  return Boolean(badgeSlot(title).card.querySelector(".wgr-badge"));
 }
 
 function scanCards() {
@@ -103,7 +126,7 @@ function scanCards() {
     if (!slug) continue;
     if (title.dataset.wgrSlug === slug) {
       // Already handled; React may have dropped our badge on re-render.
-      if (!title.parentElement?.querySelector(".wgr-badge") && results.has(`${slug}|false`)) attachBadge(title);
+      if (results.has(`${slug}|false`) && !hasBadge(title)) attachBadge(title);
       continue;
     }
     title.dataset.wgrSlug = slug;
@@ -174,10 +197,13 @@ async function scanVenuePage() {
   venueSlugInFlight = slug;
   try {
     const m = await lookup(slug, true);
-    const anchor = document.querySelector(VENUE_TITLE)?.closest("h1") ?? document.querySelector(VENUE_TITLE);
     const current = SLUG_IN_PATH.exec(location.pathname)?.[1]?.toLowerCase();
-    if (!m || !anchor || current !== slug || document.querySelector(".wgr-panel")) return;
-    anchor.after(panel(slug, m));
+    if (!m || current !== slug || document.querySelector(".wgr-panel")) return;
+    // Below the banner and info row; the banner clips anything placed inside it.
+    const header = document.querySelector(VENUE_HEADER);
+    const title = document.querySelector(VENUE_TITLE);
+    if (header) header.append(panel(slug, m));
+    else (title?.closest("h1") ?? title)?.after(panel(slug, m));
   } finally {
     venueSlugInFlight = null;
   }
