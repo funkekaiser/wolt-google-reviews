@@ -1,0 +1,10 @@
+{
+  "name": "wolt-google-reviews",
+  "private": true,
+  "workspaces": ["worker", "extension"],
+  "scripts": {
+    "test": "npm test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build": "npm run build --workspace extension"
+  }
+}

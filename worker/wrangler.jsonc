@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "wolt-google-reviews",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  // Maps Wolt venue slug -> Google place ID. Place IDs are the only Google
+  // content the Maps Platform terms allow storing indefinitely.
+  "kv_namespaces": [{ "binding": "PLACE_IDS" }],
+  "ratelimits": [
+    { "name": "RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 120, "period": 60 } }
+  ],
+  "vars": {
+    // Comma-separated Origins allowed to call the API, e.g.
+    // "chrome-extension://abcdefghijklmnopabcdefghijklmnop". Empty = allow all.
+    "ALLOWED_ORIGINS": ""
+  }
+  // Secret (not in this file): GOOGLE_PLACES_API_KEY
+  //   local: put it in worker/.dev.vars
+  //   prod:  npx wrangler secret put GOOGLE_PLACES_API_KEY
+}
