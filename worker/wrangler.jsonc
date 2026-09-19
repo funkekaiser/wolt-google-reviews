@@ -3,6 +3,9 @@
   "name": "wolt-google-reviews",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-01",
+  "workers_dev": true,
+  // Per-version preview URLs would be extra public endpoints the extension never uses.
+  "preview_urls": false,
   // Maps Wolt venue slug -> Google place ID. Place IDs are the only Google
   // content the Maps Platform terms allow storing indefinitely.
   "kv_namespaces": [{ "binding": "PLACE_IDS" }],
