@@ -1,84 +1,51 @@
 # Rating Lens for Wolt
 
-A browser extension that shows Google Maps ratings and reviews for restaurants on [wolt.com](https://wolt.com).
+A Chrome extension that shows a restaurant's Google Maps rating while you order on [wolt.com](https://wolt.com).
 
-- **Restaurant lists:** a `★ 4.6 (1.2K) Google Maps` badge next to Wolt's own score on each restaurant card, loaded as you scroll.
-- **Restaurant pages:** a panel under the title with the rating, a link to Google Maps and up to 5 recent reviews.
+On a restaurant page it adds a small Google map below the header, with Google's own place card: star rating, number of reviews and a link to the reviews on Google Maps.
 
-It only works on the Wolt website in a desktop browser, not in the Wolt mobile app.
+It works on the Wolt website in a desktop browser, not in the Wolt mobile apps.
 
 ## How it works
 
-```
-wolt.com page ──> extension ──> Cloudflare Worker ──> Wolt venue API  (name, address, postcode)
-   (content script)  (background)       │
-                                        └───────────> Google Places API (New)
-```
+The whole extension is one content script. There is no backend and no tracking.
 
-1. The content script finds venue slugs on the page (`/restaurant/<slug>` links).
-2. The Worker gets the venue's name and address from Wolt's public venue endpoint and runs a Google Places text search.
-3. The Worker accepts a result only if the **name overlaps and the street or postcode matches**, so it doesn't pick another branch of a chain or a different restaurant at the same address. See [`worker/src/match.ts`](worker/src/match.ts).
-4. The match from Wolt slug to Google place ID is stored in KV. Place IDs are the only Google data the Maps Platform terms allow storing permanently. Ratings and reviews are always fetched fresh, and clients cache them for at most 1 hour.
+1. On a `wolt.com` restaurant page, it reads the venue ID from the URL (`/restaurant/<slug>`).
+2. It fetches that venue's name and address from the same public Wolt endpoint the website itself uses.
+3. It embeds a Google map searched by that name and address, using the [Maps Embed API](https://developers.google.com/maps/documentation/embed/get-started), which Google provides free with no usage limits.
 
-**Hard spending cap:** Google Cloud can't cap spending. Budgets only send alerts, and Places API quotas are per minute. So the Worker counts every billable Google request in a Durable Object and refuses to make more once `GOOGLE_DAILY_LIMIT` (default 100) or `GOOGLE_MONTHLY_LIMIT` (default 2000) is reached. Both are set in [`worker/wrangler.jsonc`](worker/wrangler.jsonc). At the defaults, the worst case (every request on the most expensive SKU) is about $40/month. Normal personal use should stay within the free allowance.
+Because the map is an embed, the rating comes straight from Google, with Google's own attribution, and nothing is sent to any server of ours.
 
-The Google API key lives only in the Worker. The Worker answers only for Wolt slugs, so nobody can use it as a free general-purpose Places API proxy. Requests are rate-limited per IP.
-
-## Setup
-
-### 1. Google API key
-
-1. In [Google Cloud Console](https://console.cloud.google.com/), create a project and turn on billing.
-2. Enable **Places API (New)**.
-3. Create an API key and, under *API restrictions*, restrict it to **Places API (New)**.
-4. As a second safety net alongside the Worker's cap, set a budget alert under *Billing → Budgets & alerts* and lower the per-minute quotas under *Google Maps Platform → Quotas → Places API (New)* (e.g. 10/min for Text Search and Place Details).
-
-The key can't be restricted to Cloudflare. Workers don't send requests from a fixed IP address, and a referrer restriction does nothing for a server-side key. The API restriction plus keeping the key in the Worker's secret store is the protection.
-
-About cost: rating fields bill at the Places **Enterprise** tier, and reviews add **Atmosphere**. Each tier has a monthly free allowance, which covers personal use. Current prices are on the [pricing page](https://developers.google.com/maps/billing-and-pricing/pricing). A restaurant page is 1 request. On a list page, each card you scroll past is 1 request. You can turn list badges off in the extension options.
-
-### 2. Worker (Cloudflare, free tier is enough)
+## Build it
 
 ```sh
 npm install
-cd worker
-npx wrangler login
-npx wrangler secret put GOOGLE_PLACES_API_KEY
-npx wrangler deploy        # creates the PLACE_IDS KV namespace and the UsageCap Durable Object
+GOOGLE_EMBED_KEY=AIza... npm run build --workspace extension
 ```
 
-For local development, put `GOOGLE_PLACES_API_KEY=...` in `worker/.dev.vars` and run `npm run dev` (serves on `http://localhost:8787`).
+Get the key in [Google Cloud Console](https://console.cloud.google.com/): enable **Maps Embed API**, create an API key and restrict it, under *API restrictions*, to **Maps Embed API** only. That key can then only be used for a free API, so shipping it inside the extension is fine — which is how the Embed API is meant to be used. Consider adding a website restriction as well.
 
-### 3. Extension
+In Chrome, open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick `extension/dist`.
 
-```sh
-cd extension
-API_BASE=https://wolt-google-reviews.<your-subdomain>.workers.dev npm run build
-```
+## Publishing
 
-(Without `API_BASE` it points to `http://localhost:8787`.)
-
-In Chrome, open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and select `extension/dist`. Then open wolt.com.
-
-## Publishing checklist
-
-- [x] Icons (`extension/static/icons`, generated by `extension/scripts/make-icons.py`)
-- [x] Privacy policy: [`PRIVACY.md`](PRIVACY.md). Use its GitHub URL in the store listing.
-- [x] Other websites can't use the Worker: requests carrying a foreign `Origin` get 403. The extension's background fetch sends no `Origin`, so the Worker can't be tied to one extension ID. The per-IP rate limit and the Google request cap limit everything else.
-- [x] `npm run package --workspace extension` → `extension/rating-lens-for-wolt.zip` (always built against the deployed Worker)
-- [x] Store listing text and privacy-form answers: [`store/LISTING.md`](store/LISTING.md)
-- [ ] Screenshots (1280×800) in `store/`
-- [ ] Firefox build (MV3 background `scripts` instead of `service_worker`)
+- `npm run package --workspace extension` → `extension/rating-lens-for-wolt.zip`. It refuses to build without a valid embed key.
+- Listing text and answers for the store's privacy questions: [`store/LISTING.md`](store/LISTING.md)
+- Privacy policy: [`PRIVACY.md`](PRIVACY.md)
+- Still to do: screenshots (1280×800) in `store/`, and a Firefox build.
 
 ## Development
 
 ```sh
-npm test          # matching logic unit tests
 npm run typecheck
-npm run build     # extension -> extension/dist
+npm run build --workspace extension
 npm run watch --workspace extension
 ```
 
-If badges stop showing up, Wolt has probably changed its markup. The selectors are at the top of [`extension/src/content.ts`](extension/src/content.ts).
+If the map stops appearing, Wolt has probably changed its page markup. The selectors are at the top of [`extension/src/content.ts`](extension/src/content.ts).
+
+## History
+
+Earlier versions used the Google Places API through a Cloudflare Worker, which gave star ratings on restaurant lists and review texts inside the page. Places charges per request for ratings, so that version cost money for every user's browsing. It was dropped in favour of the free embed. The Worker, and its venue-matching logic, is in the git history.
 
 Not affiliated with Wolt or Google.

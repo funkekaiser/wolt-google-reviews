@@ -2,40 +2,26 @@
 
 _Last updated: 19 September 2026_
 
-Rating Lens for Wolt is a browser extension that shows Google Maps ratings and reviews next to restaurants on wolt.com. It is built to collect as little as possible.
+Rating Lens for Wolt shows a restaurant's Google Maps rating on wolt.com. It collects nothing.
 
-## What the extension sends
+## What the extension does
 
-When you view a page on `wolt.com`, the extension reads the **venue identifiers** in that page's links (for example `mcdonalds-kamppi-1`). It sends each one, together with the **language code** from the Wolt URL (for example `en`), to the extension's server at `wolt-google-reviews.funkekaiser.workers.dev`.
+When you open a restaurant page on `wolt.com`, the extension:
 
-That's all it sends. The extension does **not** read or send your Wolt account, address, orders, cart, cookies, browsing history or anything you type.
+1. Reads the restaurant's ID from the page address.
+2. Asks Wolt's public venue endpoint for that restaurant's name and address, the same request the Wolt website makes itself.
+3. Embeds a Google map of that restaurant, using the Google Maps Embed API.
 
-## What the server does with it
+## What is not collected
 
-The server runs on Cloudflare Workers. For each venue identifier it:
+- No servers belong to this extension, and nothing is sent to its developer.
+- No analytics, tracking, advertising or accounts.
+- Nothing is stored in your browser, and no data is sold or shared.
+- The extension does not read or send your Wolt account, address, orders, cart, cookies, browsing history or anything you type.
 
-1. Fetches the venue's public name and address from Wolt.
-2. Looks up the venue with the Google Places API and returns its rating and reviews.
-3. Stores the match between the Wolt venue identifier and the Google place ID, so later lookups are faster. This contains no information about you.
+## Third parties
 
-Like any web server, Cloudflare receives your IP address with each request. The server uses it only for short-term rate limiting and does not store it. Cloudflare may process request data as described in the [Cloudflare Privacy Policy](https://www.cloudflare.com/privacypolicy/).
-
-Google receives the venue name and address, not your IP address or any information about you, because the requests to Google come from the server. Google's handling of Places API requests is covered by the [Google Privacy Policy](https://policies.google.com/privacy).
-
-## Stored in your browser
-
-- One setting (whether to show ratings on restaurant lists), saved with your browser's extension sync storage.
-- Ratings may be kept in your browser's normal HTTP cache for up to one hour.
-
-## What is not done
-
-- No analytics, tracking or advertising.
-- No selling or sharing of data.
-- No accounts.
-
-## Ratings and reviews
-
-Ratings and reviews come from Google Maps. The extension shows them with attribution and links to the reviewers' Google profiles, and does not store them on the server.
+The embedded map is loaded from Google. As with any embedded Google map on any website, Google receives the request for it, including your IP address, and the name and address being searched for. Google's handling of this is covered by the [Google Privacy Policy](https://policies.google.com/privacy). The restaurant's name and address are fetched from Wolt, whose handling is covered by the [Wolt Privacy Statement](https://explore.wolt.com/en/fin/privacy-statement).
 
 ## Changes and contact
 

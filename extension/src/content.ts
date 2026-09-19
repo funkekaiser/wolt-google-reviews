@@ -1,265 +1,119 @@
-// Adds Google ratings to restaurant cards and a reviews panel to venue pages
-// on wolt.com. Wolt is a React SPA, so we rescan on DOM mutations and keep
-// results in memory to re-attach UI when React re-renders a card.
-import { DEFAULT_SETTINGS, loadSettings, type LookupRequest, type LookupResponse, type PlaceMatch, type Review } from "./types";
+// Adds a Google Maps place card to restaurant pages on wolt.com.
+//
+// Everything runs in the page: the venue's name and address come from the same
+// public Wolt endpoint the site itself uses, and the rating comes from an
+// embedded Google map (Maps Embed API: free, no usage limits, no backend).
+// Wolt is a React SPA, so we rescan on DOM changes and follow navigations.
 
-const CARD_TITLE = '[data-test-id="venue-title"]';
 const VENUE_TITLE = '[data-test-id="venue-hero.venue-title"]';
 // Wraps the hero banner (fixed height, overflow hidden) and the info row below it.
 const VENUE_HEADER = '[data-test-id="venue-content-header.root"]';
 const SLUG_IN_PATH = /\/(?:restaurant|venue)\/([a-z0-9][a-z0-9-]*)/i;
+const VENUE_API = "https://consumer-api.wolt.com/order-xp/web/v1/pages/venue/slug/";
 
-let settings = DEFAULT_SETTINGS;
+declare const __EMBED_KEY__: string;
+
 // Wolt paths look like /en/fin/helsinki/restaurant/<slug>.
 const pathLang = location.pathname.split("/")[1];
 const lang = /^[a-z]{2}(-[a-z]{2,4})?$/i.test(pathLang) ? pathLang : undefined;
 
-// Results keyed by `${slug}|${withReviews}`; the promise dedupes in-flight lookups.
-const results = new Map<string, Promise<PlaceMatch | null>>();
-
-// When the extension is reloaded or updated, copies of this script already
-// running in open tabs are orphaned: chrome.runtime becomes undefined (or
-// throws). Detect that and stop, instead of throwing on every DOM change.
-let orphaned = false;
-const stopHandlers: (() => void)[] = [];
-
-function extensionAlive(): boolean {
-  if (orphaned) return false;
-  try {
-    if (chrome.runtime?.id) return true;
-  } catch {
-    // "Extension context invalidated"
-  }
-  orphaned = true;
-  stopHandlers.forEach((stop) => stop());
-  return false;
+interface Venue {
+  name: string;
+  address: string;
+  postCode: string;
+  city: string;
 }
 
-function lookup(slug: string, withReviews: boolean): Promise<PlaceMatch | null> {
-  if (!extensionAlive()) return Promise.resolve(null);
-  const key = `${slug}|${withReviews}`;
-  let p = results.get(key);
+const venues = new Map<string, Promise<Venue | null>>();
+
+function fetchVenue(slug: string): Promise<Venue | null> {
+  let p = venues.get(slug);
   if (!p) {
-    const req: LookupRequest = { type: "lookup", slug, withReviews, lang };
-    p = chrome.runtime
-      .sendMessage<LookupRequest, LookupResponse>(req)
-      .catch((err): LookupResponse => {
-        extensionAlive(); // stops everything if this was an invalidated context
-        return { ok: false, error: String(err) };
+    p = fetch(`${VENUE_API}${encodeURIComponent(slug)}/static`, {
+      credentials: "omit",
+      headers: { Accept: "application/json" },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        const v = body?.venue;
+        if (!v?.name) return null;
+        return { name: v.name, address: v.address ?? "", postCode: v.post_code ?? "", city: v.city ?? "" };
       })
-      .then((res) => {
-        if (res?.ok) return res.match;
-        // Keep the failure briefly so DOM churn doesn't hammer the API, then allow a retry.
-        setTimeout(() => results.delete(key), 30_000);
-        console.debug("[wolt-google-reviews]", slug, res?.error);
+      .catch((err) => {
+        venues.delete(slug); // allow a retry
+        console.debug("[rating-lens]", slug, err);
         return null;
       });
-    results.set(key, p);
+    venues.set(slug, p);
   }
   return p;
 }
 
-// ---- DOM helpers ----------------------------------------------------------
-
-type Child = Node | string | null | false | undefined;
-
-function el<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  attrs: Record<string, string> = {},
-  ...children: Child[]
-): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
-  for (const c of children) if (c) node.append(c);
-  return node;
+// What Google searches for. The full street address keeps chain branches apart.
+function embedQuery(v: Venue): string {
+  return [v.name, v.address, [v.postCode, v.city].filter(Boolean).join(" ")].filter(Boolean).join(", ");
 }
 
-function link(href: string, ...children: Child[]) {
-  return el("a", { href, target: "_blank", rel: "noopener noreferrer" }, ...children);
+function embedUrl(v: Venue): string {
+  const params = new URLSearchParams({ key: __EMBED_KEY__, q: embedQuery(v) });
+  if (lang) params.set("language", lang);
+  return `https://www.google.com/maps/embed/v1/place?${params}`;
 }
 
-function formatCount(n: number): string {
-  return new Intl.NumberFormat(lang, { notation: "compact", maximumFractionDigits: 1 }).format(n);
+function panel(slug: string, v: Venue): HTMLElement {
+  const section = document.createElement("section");
+  section.className = "wgr-panel";
+  section.dataset.wgrSlug = slug;
+
+  const frame = document.createElement("iframe");
+  frame.className = "wgr-map";
+  frame.src = embedUrl(v);
+  frame.loading = "lazy";
+  frame.referrerPolicy = "no-referrer-when-downgrade";
+  frame.title = `${v.name} on Google Maps`;
+  frame.setAttribute("allowfullscreen", "");
+
+  const note = document.createElement("div");
+  note.className = "wgr-note";
+  note.textContent = "Rating and reviews from Google Maps";
+
+  section.append(frame, note);
+  return section;
 }
 
-function stars(rating: number): string {
-  const full = Math.round(rating);
-  return "★".repeat(full) + "☆".repeat(5 - full);
-}
-
-// ---- List cards -----------------------------------------------------------
-
-function badge(m: PlaceMatch): HTMLElement {
-  return el(
-    "span",
-    {
-      class: "wgr-badge",
-      title: `${m.name} on Google Maps: ${m.rating?.toFixed(1)} from ${m.userRatingCount} reviews`,
-    },
-    el("span", { class: "wgr-star" }, "★"),
-    m.rating!.toFixed(1),
-    el("span", { class: "wgr-count" }, `(${formatCount(m.userRatingCount)})`),
-    // Google requires Places data shown without a Google map to carry "Google Maps" attribution.
-    el("span", { class: "wgr-source" }, "Google Maps"),
-  );
-}
-
-const visible = new IntersectionObserver(
-  (entries) => {
-    for (const e of entries) {
-      if (!e.isIntersecting) continue;
-      visible.unobserve(e.target);
-      attachBadge(e.target as HTMLElement);
-    }
-  },
-  { rootMargin: "200px" },
-);
-stopHandlers.push(() => visible.disconnect());
-
-// The card's footer row reads "€0.00 · €€ · 😊 8.4"; the badge goes right after
-// Wolt's own score. Wolt has no test IDs there, so find the score by its shape.
-// Returns the element to insert after and the card to check for an existing badge.
-function badgeSlot(title: HTMLElement): { after: Element; card: Element } {
-  let card: Element | null = title.parentElement;
-  for (let depth = 0; card && depth < 6; depth++, card = card.parentElement) {
-    const score = [...card.querySelectorAll("span")].find(
-      (s) => s.childElementCount === 0 && /^\d{1,2}\.\d$/.test(s.textContent?.trim() ?? "") && !s.closest(".wgr-badge"),
-    );
-    const item = score?.parentElement?.closest("span");
-    if (item && card.contains(item)) return { after: item, card };
-  }
-  // No Wolt score (e.g. a new venue): fall back to next to the title.
-  return { after: title, card: title.parentElement ?? title };
-}
-
-async function attachBadge(title: HTMLElement) {
-  const slug = title.dataset.wgrSlug!;
-  const m = await lookup(slug, false);
-  if (!m || m.rating == null || !title.isConnected || !settings.showOnLists) return;
-  const slot = badgeSlot(title);
-  if (slot.card.querySelector(".wgr-badge")) return;
-  slot.after.after(badge(m));
-}
-
-function hasBadge(title: HTMLElement): boolean {
-  return Boolean(badgeSlot(title).card.querySelector(".wgr-badge"));
-}
-
-function scanCards() {
-  if (!settings.showOnLists) return;
-  for (const title of document.querySelectorAll<HTMLElement>(CARD_TITLE)) {
-    const href = title.closest("a")?.getAttribute("href") ?? "";
-    const slug = SLUG_IN_PATH.exec(href)?.[1]?.toLowerCase();
-    if (!slug) continue;
-    if (title.dataset.wgrSlug === slug) {
-      // Already handled; React may have dropped our badge on re-render.
-      if (results.has(`${slug}|false`) && !hasBadge(title)) attachBadge(title);
-      continue;
-    }
-    title.dataset.wgrSlug = slug;
-    visible.observe(title);
-  }
-}
-
-// ---- Venue page -----------------------------------------------------------
-
-function reviewItem(r: Review): HTMLElement {
-  return el(
-    "li",
-    { class: "wgr-review" },
-    el(
-      "div",
-      { class: "wgr-review-head" },
-      r.author.photoUrl && el("img", { src: r.author.photoUrl, alt: "", referrerpolicy: "no-referrer", loading: "lazy" }),
-      r.author.url ? link(r.author.url, r.author.name) : el("span", {}, r.author.name),
-      r.rating != null && el("span", { class: "wgr-stars", title: `${r.rating}/5` }, stars(r.rating)),
-      el("span", { class: "wgr-muted" }, r.relativeTime),
-    ),
-    el("p", {}, r.text),
-  );
-}
-
-function panel(slug: string, m: PlaceMatch): HTMLElement {
-  const reviews = m.reviews ?? [];
-  const list = el("ul", { class: "wgr-reviews", hidden: "" }, ...reviews.map(reviewItem));
-  const toggle =
-    reviews.length > 0 &&
-    el("button", { type: "button", class: "wgr-toggle", "aria-expanded": "false" }, `Show ${reviews.length} reviews`);
-  if (toggle) {
-    toggle.addEventListener("click", () => {
-      const open = list.hidden;
-      list.hidden = !open;
-      toggle.setAttribute("aria-expanded", String(open));
-      toggle.textContent = open ? "Hide reviews" : `Show ${reviews.length} reviews`;
-    });
-  }
-  return el(
-    "section",
-    { class: "wgr-panel", "data-wgr-slug": slug },
-    el(
-      "div",
-      { class: "wgr-summary" },
-      m.rating != null
-        ? el("span", { class: "wgr-rating" }, el("span", { class: "wgr-star" }, "★"), m.rating.toFixed(1))
-        : el("span", { class: "wgr-muted" }, "No rating yet"),
-      el("span", { class: "wgr-muted" }, `${m.userRatingCount.toLocaleString(lang)} Google reviews`),
-      toggle,
-      link(m.mapsUrl, "Open in Google Maps"),
-    ),
-    list,
-    el("div", { class: "wgr-attribution" }, "Ratings and reviews from Google Maps"),
-  );
-}
-
-let venueSlugInFlight: string | null = null;
+let inFlight: string | null = null;
 
 async function scanVenuePage() {
   const slug = SLUG_IN_PATH.exec(location.pathname)?.[1]?.toLowerCase();
   for (const p of document.querySelectorAll<HTMLElement>(".wgr-panel")) {
     if (p.dataset.wgrSlug !== slug) p.remove();
   }
-  const title = document.querySelector(VENUE_TITLE);
-  if (!slug || !title || document.querySelector(".wgr-panel") || venueSlugInFlight === slug) return;
+  if (!slug || !document.querySelector(VENUE_TITLE) || document.querySelector(".wgr-panel") || inFlight === slug) return;
 
-  venueSlugInFlight = slug;
+  inFlight = slug;
   try {
-    const m = await lookup(slug, true);
+    const venue = await fetchVenue(slug);
     const current = SLUG_IN_PATH.exec(location.pathname)?.[1]?.toLowerCase();
-    if (!m || current !== slug || document.querySelector(".wgr-panel")) return;
+    if (!venue || current !== slug || document.querySelector(".wgr-panel")) return;
     // Below the banner and info row; the banner clips anything placed inside it.
     const header = document.querySelector(VENUE_HEADER);
     const title = document.querySelector(VENUE_TITLE);
-    if (header) header.append(panel(slug, m));
-    else (title?.closest("h1") ?? title)?.after(panel(slug, m));
+    if (header) header.append(panel(slug, venue));
+    else (title?.closest("h1") ?? title)?.after(panel(slug, venue));
   } finally {
-    venueSlugInFlight = null;
+    inFlight = null;
   }
 }
 
-// ---- Wiring ---------------------------------------------------------------
-
 let scheduled = false;
 function scheduleScan() {
-  if (scheduled || !extensionAlive()) return;
+  if (scheduled) return;
   scheduled = true;
   requestAnimationFrame(() => {
     scheduled = false;
-    scanCards();
     scanVenuePage();
   });
 }
 
-loadSettings().then((s) => {
-  settings = s;
-  scheduleScan();
-  const observer = new MutationObserver(scheduleScan);
-  observer.observe(document.body, { childList: true, subtree: true });
-  stopHandlers.push(() => observer.disconnect());
-});
-
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== "sync" || !changes.showOnLists) return;
-  settings = { ...settings, showOnLists: changes.showOnLists.newValue as boolean };
-  if (!settings.showOnLists) document.querySelectorAll(".wgr-badge").forEach((b) => b.remove());
-  scheduleScan();
-});
+scheduleScan();
+new MutationObserver(scheduleScan).observe(document.body, { childList: true, subtree: true });

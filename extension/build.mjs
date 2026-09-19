@@ -1,31 +1,30 @@
-// Bundles the extension into dist/. The API base URL is baked in at build time:
-//   API_BASE=https://wolt-google-reviews.<you>.workers.dev npm run build
+// Bundles the extension into dist/. The Google Maps Embed API key is baked in
+// at build time (it is free and usage-capped by Google's own restrictions, so
+// shipping it in the extension is expected):
+//   GOOGLE_EMBED_KEY=AIza... npm run build
 import * as esbuild from "esbuild";
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, rm } from "node:fs/promises";
 
-const apiBase = (process.env.API_BASE ?? "http://localhost:8787").replace(/\/+$/, "");
+const embedKey = process.env.GOOGLE_EMBED_KEY ?? "";
 const watch = process.argv.includes("--watch");
 
-if (process.argv.includes("--release") && !apiBase.startsWith("https://")) {
-  console.error(`Refusing to build a release against ${apiBase}; set API_BASE to the deployed Worker.`);
+if (process.argv.includes("--release") && !/^AIza[\w-]{35}$/.test(embedKey)) {
+  console.error("Refusing to build a release without a valid GOOGLE_EMBED_KEY.");
   process.exit(1);
 }
+if (!embedKey) console.warn("Warning: no GOOGLE_EMBED_KEY set; maps will not load.");
 
 await rm("dist", { recursive: true, force: true });
 await mkdir("dist", { recursive: true });
 await cp("static", "dist", { recursive: true });
 
-const manifest = JSON.parse(await readFile("static/manifest.json", "utf8"));
-manifest.host_permissions.push(`${new URL(apiBase).origin}/*`);
-await writeFile("dist/manifest.json", JSON.stringify(manifest, null, 2));
-
 const ctx = await esbuild.context({
-  entryPoints: ["src/background.ts", "src/content.ts", "src/options.ts"],
+  entryPoints: ["src/content.ts"],
   bundle: true,
   outdir: "dist",
   format: "iife",
   target: "chrome120",
-  define: { __API_BASE__: JSON.stringify(apiBase) },
+  define: { __EMBED_KEY__: JSON.stringify(embedKey) },
   logLevel: "info",
 });
 
