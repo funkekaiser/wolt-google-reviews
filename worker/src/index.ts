@@ -7,13 +7,20 @@
 
 import { getPlace, searchText, GoogleApiError, type GooglePlace } from "./google";
 import { pickBestMatch } from "./match";
+import { parseLimits, UsageCapExceeded } from "./usage";
+import type { UsageCap } from "./usage-cap";
 import { fetchWoltVenue, searchQuery, SLUG_RE } from "./wolt";
+
+export { UsageCap } from "./usage-cap";
 
 export interface Env {
   GOOGLE_PLACES_API_KEY: string;
   PLACE_IDS: KVNamespace;
   RATE_LIMITER: RateLimit;
   ALLOWED_ORIGINS: string;
+  USAGE_CAP: DurableObjectNamespace<UsageCap>;
+  GOOGLE_DAILY_LIMIT: string;
+  GOOGLE_MONTHLY_LIMIT: string;
 }
 
 const NO_MATCH = "none";
@@ -52,6 +59,11 @@ export default {
       const place = await resolve(env, slug, withReviews, lang);
       return json({ match: place ? toResponse(place, withReviews) : null }, 200, CLIENT_CACHE);
     } catch (err) {
+      if (err instanceof UsageCapExceeded) {
+        return json({ error: "cap_reached", period: err.period }, 503, "no-store", {
+          "Retry-After": String(err.retryAfterSeconds),
+        });
+      }
       console.error(err);
       const status = err instanceof GoogleApiError && err.status === 429 ? 503 : 502;
       return json({ error: "upstream_error" }, status);
@@ -61,11 +73,19 @@ export default {
 
 async function resolve(env: Env, slug: string, withReviews: boolean, lang?: string): Promise<GooglePlace | null> {
   const opts = { apiKey: env.GOOGLE_PLACES_API_KEY, withReviews, languageCode: lang };
+  const limits = parseLimits(env.GOOGLE_DAILY_LIMIT, env.GOOGLE_MONTHLY_LIMIT);
+  const cap = env.USAGE_CAP.get(env.USAGE_CAP.idFromName("global"));
+  // Call before every billable Google request.
+  const spend = async () => {
+    const r = await cap.tryConsume(limits);
+    if (!r.ok) throw new UsageCapExceeded(r.period, r.retryAfterSeconds);
+  };
 
   const cached = await env.PLACE_IDS.get(slug);
   if (cached === NO_MATCH) return null;
   if (cached) {
     try {
+      await spend();
       return await getPlace(cached, opts);
     } catch (err) {
       // Place IDs can go stale; drop it and search again.
@@ -77,6 +97,7 @@ async function resolve(env: Env, slug: string, withReviews: boolean, lang?: stri
   const venue = await fetchWoltVenue(slug);
   if (!venue) return null;
 
+  await spend();
   const results = await searchText(searchQuery(venue), opts);
   const best = pickBestMatch(
     venue,
@@ -112,9 +133,9 @@ function toResponse(p: GooglePlace, withReviews: boolean) {
   };
 }
 
-function json(body: unknown, status: number, cacheControl = "no-store"): Response {
+function json(body: unknown, status: number, cacheControl = "no-store", extraHeaders: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", "Cache-Control": cacheControl },
+    headers: { "Content-Type": "application/json", "Cache-Control": cacheControl, ...extraHeaders },
   });
 }
