@@ -1,5 +1,7 @@
 # Chrome Web Store listing: Rating Lens for Wolt
 
+Published: <https://chromewebstore.google.com/detail/rating-lens-for-wolt/ceajonpflhidcndnpjnfdadlkhdeolmh> (extension ID `ceajonpflhidcndnpjnfdadlkhdeolmh`)
+
 Copy these into the [Developer Dashboard](https://chrome.google.com/webstore/devconsole). Upload `extension/rating-lens-for-wolt.zip`, built with `GOOGLE_EMBED_KEY=AIza... npm run package --workspace extension`.
 
 ## Store listing tab

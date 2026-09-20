@@ -2,6 +2,8 @@
 
 A Chrome extension that shows a restaurant's Google Maps rating while you order on [wolt.com](https://wolt.com).
 
+**[Install from the Chrome Web Store](https://chromewebstore.google.com/detail/rating-lens-for-wolt/ceajonpflhidcndnpjnfdadlkhdeolmh)**
+
 On a restaurant page it adds a small Google map with Google's own place card: star rating, number of reviews and a link to the reviews on Google Maps. On a wide window the map sits beside the restaurant name; on a narrower one it goes below Wolt's info row.
 
 It works on the Wolt website in a desktop browser, not in the Wolt mobile apps.
